@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enhanced Expense Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    input, select, button { width: 100%; padding: 8px; margin: 6px 0; }
+    table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    h3 { margin-top: 30px; }
+    canvas { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h2>💰 Enhanced Expense Tracker</h2>
+
+  <h3>Set Category Budgets ($)</h3>
+  <div id="budgetInputs"></div>
+
+  <h3>Add Expense</h3>
+  <label>Date: <input type="date" id="date"></label>
+  <label>Description: <input type="text" id="desc"></label>
+  <label>Category:
+    <select id="cat">
+      <option>Food</option>
+      <option>Transport</option>
+      <option>Entertainment</option>
+      <option>Bills</option>
+      <option>Other</option>
+    </select>
+  </label>
+  <label>Amount ($): <input type="number" id="amt" step="0.01"></label>
+  <button onclick="addExpense()">➕ Add Expense</button>
+  <button onclick="clearData()">🧹 Clear All</button>
+
+  <div id="budgetSummary" style="margin-top: 20px; font-weight: bold;"></div>
+  <button onclick="downloadCSV()">📥 Download CSV</button>
+  <button onclick="toggleMonthView()">📆 Toggle Month View</button>
+
+  <table id="expenseTable">
+    <tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr>
+  </table>
+
+  <h3>📊 Expense Overview</h3>
+  <canvas id="budgetChart"></canvas>
+  <canvas id="monthlyChart"></canvas>
+
+  <script>
+    const categories = ["Food", "Transport", "Entertainment", "Bills", "Other"];
+    let expenses = [
+      { date: "2025-06-01", desc: "Walmart: Basic living things", cat: "Other", amount: 125.95 },
+      { date: "2025-06-04", desc: "No fridge, no dinner", cat: "Other", amount: 17.25 },
+      { date: "2025-06-04", desc: "Pique nique", cat: "Food", amount: 30.37 },
+      { date: "2025-06-05", desc: "Breakfast/lunch", cat: "Food", amount: 8.13 },
+      { date: "2025-06-08", desc: "Grocery (Maxi)", cat: "Food", amount: 35.00 },
+      { date: "2025-06-09", desc: "Coffee - panic attack", cat: "Food", amount: 6.28 },
+      { date: "2025-06-01", desc: "Internet Fizz", cat: "Bills", amount: 49.00 },
+      { date: "2025-06-01", desc: "Loyer", cat: "Bills", amount: 867.50 },
+      { date: "2025-04-01", desc: "Pharmacie", cat: "Other", amount: 28.81 },
+      { date: "2025-04-07", desc: "Friend's outing (Québec)", cat: "Entertainment", amount: 31.15 },
+      { date: "2025-04-08", desc: "Dinner, Poke Station", cat: "Entertainment", amount: 25.76 },
+      { date: "2025-04-08", desc: "Lunch and coffee JGH", cat: "Entertainment", amount: 12.52 },
+      { date: "2025-04-11", desc: "Lunch + coffee JGH", cat: "Food", amount: 12.52 },
+      { date: "2025-04-15", desc: "Chez simone outing", cat: "Entertainment", amount: 45.95 },
+      { date: "2025-04-22", desc: "Pharmacy period run", cat: "Entertainment", amount: 42.53 },
+      { date: "2025-06-06", desc: "Coffee (the nespresso arrived the next day)", cat: "Food", amount: 5.80 }
+    ];
+    let categoryBudgets = JSON.parse(localStorage.getItem("categoryBudgets") || "{}");
+    let monthView = false;
+
+    function createBudgetInputs() {
+      const container = document.getElementById("budgetInputs");
+      container.innerHTML = "";
+      categories.forEach(cat => {
+        const val = categoryBudgets[cat] || "";
+        container.innerHTML += `<label>${cat} Budget:<input type="number" id="budget-${cat}" value="${val}" onchange="saveBudgets()" /></label><br>`;
+      });
+    }
+
+    function saveBudgets() {
+      categories.forEach(cat => {
+        const val = parseFloat(document.getElementById(`budget-${cat}`).value) || 0;
+        categoryBudgets[cat] = val;
+      });
+      localStorage.setItem("categoryBudgets", JSON.stringify(categoryBudgets));
+      updateBudgetSummary();
+      updateChart();
+    }
+
+    function addExpense() {
+      const date = document.getElementById('date').value;
+      const desc = document.getElementById('desc').value;
+      const cat = document.getElementById('cat').value;
+      const amt = parseFloat(document.getElementById('amt').value);
+      if (!date || !desc || !amt) { alert("Please fill all fields"); return; }
+      expenses.push({ date, desc, cat, amount: amt });
+      renderTable();
+      updateBudgetSummary();
+      updateChart();
+    }
+
+    function renderTable() {
+      const table = document.getElementById('expenseTable');
+      table.innerHTML = '<tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr>';
+      expenses.forEach(e => {
+        const row = table.insertRow();
+        row.innerHTML = `<td>${e.date}</td><td>${e.desc}</td><td>${e.cat}</td><td>$${e.amount.toFixed(2)}</td>`;
+      });
+    }
+
+    function updateBudgetSummary() {
+      const totals = {};
+      expenses.forEach(e => { totals[e.cat] = (totals[e.cat] || 0) + e.amount; });
+      let summary = "";
+      categories.forEach(cat => {
+        const spent = totals[cat] || 0;
+        const budget = categoryBudgets[cat] || 0;
+        const remaining = budget - spent;
+        const status = remaining >= 0 ? "🟢 Under Budget" : "🔴 Over Budget";
+        summary += `${cat}: Spent $${spent.toFixed(2)} / $${budget.toFixed(2)} → ${status}<br>`;
+      });
+      document.getElementById("budgetSummary").innerHTML = summary;
+    }
+
+    function updateChart() {
+      const totals = {}, months = {};
+      expenses.forEach(e => {
+        totals[e.cat] = (totals[e.cat] || 0) + e.amount;
+        const month = e.date.slice(0,7);
+        months[month] = (months[month] || 0) + e.amount;
+      });
+      const chartLabels = [], spentData = [], budgetData = [];
+      categories.forEach(cat => {
+        chartLabels.push(cat);
+        spentData.push(totals[cat] || 0);
+        budgetData.push(categoryBudgets[cat] || 0);
+      });
+      const ctx = document.getElementById('budgetChart').getContext('2d');
+      if (window.budgetChartObj) window.budgetChartObj.destroy();
+      window.budgetChartObj = new Chart(ctx, {
+        type: 'bar', data: { labels: chartLabels, datasets: [ { label: 'Spent', data: spentData, backgroundColor: 'rgba(255,99,132,0.7)' }, { label: 'Budget', data: budgetData, backgroundColor: 'rgba(54,162,235,0.5)' } ] },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+      const monthLabels = Object.keys(months);
+      const monthData = Object.values(months);
+      const ctx2 = document.getElementById('monthlyChart').getContext('2d');
+      if (window.monthChartObj) window.monthChartObj.destroy();
+      window.monthChartObj = new Chart(ctx2, {
+        type: 'line', data: { labels: monthLabels, datasets: [ { label: 'Total per Month', data: monthData, fill: false, borderColor: 'rgba(75,192,192,1)' } ] },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    function downloadCSV() {
+      let csv = 'Date,Description,Category,Amount\n';
+      expenses.forEach(e => { csv += `${e.date},${e.desc},${e.cat},${e.amount}\n`; });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'expenses.csv';
+      a.click();
+    }
+
+    function toggleMonthView() {
+      monthView = !monthView;
+      document.getElementById('monthlyChart').style.display = monthView ? 'block' : 'none';
+    }
+
+    createBudgetInputs();
+    renderTable();
+    updateBudgetSummary();
+    updateChart();
+  </script>
+</body>
+</html>
